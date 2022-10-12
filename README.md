@@ -1,7 +1,4 @@
-# :factory: Infrastructure as Code | 
-<!-- [![GitHub license](https://github.com/jeeltpatel/webapp/blob/master/LICENSE)](https://github.com/Naereen/StrapDown.js/blob/master/LICENSE) -->
-
-<!-- [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) -->
+# :factory: Infrastructure as Code  [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 
 Setup AWS infrastructure with `CloudFormation` templates.
 
