@@ -1,0 +1,136 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: Creating VPC attaching IGW to it and then Creating three public subnets in same vpc
+Parameters:
+  Environment:
+    Description: An environment name that is prefixed to resource names
+    Type: String
+    Default: csye6225-environment
+
+  VpcCIDR:
+    Type: String
+    Default: 10.192.0.0/16
+    Description: Please enter the IP range
+
+  CIDRPublicSubnet1:
+    Type: String
+    Default: 10.192.10.0/24
+    Description: Please enter the IP range in the first Availability Zone
+
+  CIDRPublicSubnet2:
+    Type: String
+    Default: 10.192.11.0/24
+    Description: Please enter the IP range in the second Availability Zone
+
+  CIDRPublicSubnet3:
+    Type: String
+    Default: 10.192.20.0/24
+    Description: Please enter the IP range in the third Availability Zone
+
+Resources:
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCIDR
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Ref Environment
+  #creating IGW
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Ref Environment
+  #Attaching above created IGW with myVPC
+  IGAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref VPC
+ #creating Public Subnet-1:
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      CidrBlock: !Ref CIDRPublicSubnet1
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${Environment} Public Subnet (AZ1)
+ #creating Public Subnet-2:
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      CidrBlock: !Ref CIDRPublicSubnet2
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${Environment} Public Subnet (AZ2)
+  #creating Public Subnet-3:
+  PublicSubnet3:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [2, !GetAZs ""]
+      CidrBlock: !Ref CIDRPublicSubnet3
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub ${Environment} Public Subnet (AZ3)
+ #creating A Public Route Table:
+  Route:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${Environment} Public Routes
+ #creating a public route to above created public route table with destination CIDR block 0.0.0.0/0 and Above created IGW 
+  DefaultPublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: IGAttachment
+    Properties:
+      RouteTableId: !Ref Route
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+ #Attaching the public subnets-1 to the Public Route Table:
+  PSubnet1RouteAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref Route
+      SubnetId: !Ref PublicSubnet1
+  #Attaching the public subnets-2 to the Public Route Table:
+  PSubnet2RouteAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref Route
+      SubnetId: !Ref PublicSubnet2
+  #Attaching the public subnets-3 to the Public Route Table:
+  PSubnet3RouteAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref Route
+      SubnetId: !Ref PublicSubnet3
+#For exposing the resources from one Stack on CloudFormation to Others
+Outputs:
+  VpcId:
+    Description: The VPC ID
+    Value: !Ref VPC
+  PublicSubnet1:  
+    Description: Public Subnet-1
+    Value: !Ref PublicSubnet1
+  PublicSubnet2:  
+    Description: Public Subnet-2
+    Value: !Ref PublicSubnet2
+  PublicSubnet3:  
+    Description: Public Subnet-3
+    Value: !Ref PublicSubnet3
+  Subnets:
+    Description: The list of subnets
+    Value: !Join [",",[ !Ref PublicSubnet1 , !Ref PublicSubnet2 , !Ref PublicSubnet3]]
