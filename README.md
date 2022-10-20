@@ -146,6 +146,3 @@ aws cloudformation list-stacks --output table
 
 [Jeel Patel](mailto:patel.jeel@northeastern.edu)
 
-<!-- ## :scroll: License
-
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE) -->
