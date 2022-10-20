@@ -26,6 +26,15 @@ Parameters:
     Type: String
     Default: 10.192.20.0/24
     Description: Enter the IP range in the third Availability Zone
+  EC2InstanceType:
+    Type: String
+    Default: t2.micro
+    AllowedValues: [t2.micro]
+    Description: "EC2Instance AMI"
+  AMI:
+    Type: String
+    Default: "ami-0faf32e93d002e9d6"
+    Description: "The AMI to use"
 
 Resources:
   VPC:
@@ -117,6 +126,127 @@ Resources:
     Properties:
       RouteTableId: !Ref Route
       SubnetId: !Ref PublicSubnet3
+  # EC2 instance Launch
+  EC2AppInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref AMI
+      InstanceType: !Ref EC2InstanceType
+      KeyName: aws
+      SubnetId: !Ref PublicSubnet1
+      SecurityGroupIds:
+        - !Ref EC2InstanceSecurityGroup
+      DisableApiTermination: false # protected against accidental termination :NO
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeType: gp2
+            DeleteOnTermination: true
+            VolumeSize: 50
+            Encrypted: true
+      Tags:
+        -
+          Key: Name
+          Value: webapp
+      UserData:
+        Fn::Base64:
+            !Sub |
+            #!/bin/bash
+            echo "Starting the REST API Service"
+            sudo systemctl enable webapp.service
+            sudo systemctl start webapp.service
+            sudo systemctl restart webapp.service
+            
+            APISRVC=$?
+            if [ $APISRVC -eq 0 ]; then
+              echo "API service is running successfully!"
+            else
+              echo "Unable to start the API service"
+            fi
+  
+  SSHSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: SSH Security Group
+      SecurityGroupIngress:
+
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIpv6: ::/0    
+
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIpv6: ::/0  
+
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIpv6: ::/0
+
+        - IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+          CidrIpv6: ::/0                   
+      Tags:
+        - Key: Name
+          Value: SSH Security Group
+      VpcId: !Ref VPC
+  
+  # EC2 Security Group
+  EC2InstanceSecurityGroup:
+     Type: AWS::EC2::SecurityGroup
+     Properties:
+      GroupDescription: EC2 Security group with ports
+      GroupName: applicationSecurityGroup
+      SecurityGroupIngress: [
+          {
+            "IpProtocol" : "tcp",
+            "FromPort" : "22",
+            "ToPort" : "22",
+            "CidrIp" : "0.0.0.0/0"
+          },
+          {
+            "IpProtocol" : "tcp",
+            "FromPort" : "80",
+            "ToPort" : "80",
+            "CidrIp" : "0.0.0.0/0"
+          },
+          {
+            "IpProtocol" : "tcp",
+            "FromPort" : "443",
+            "ToPort" : "443",
+            "CidrIp" : "0.0.0.0/0"
+          },
+          {
+            "IpProtocol" : "tcp",
+            "FromPort" : "3000",
+            "ToPort" : "3000",
+            "CidrIp" : "0.0.0.0/0"
+          }
+        ]
+      Tags:
+        - Key: Name
+          Value: EC2 Security Group
+      VpcId: !Ref VPC
+
 #For exposing the resources from one Stack on CloudFormation to Others
 Outputs:
   VpcId:
