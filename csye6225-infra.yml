@@ -5,7 +5,7 @@ Parameters:
   Environment:
     Description: An environment name that is prefixed to resource names
     Type: String
-    Default: csye-6225-env
+    Default: CSYE-6225-env
 
   VpcCIDR:
     Type: String
@@ -26,6 +26,22 @@ Parameters:
     Type: String
     Default: 10.192.20.0/24
     Description: Enter the IP range in the third Availability Zone
+
+  CIDRPrivateSubnet1:
+    Type: String
+    Default: 10.192.30.0/24
+    Description: Please Enter the IP Range for Private Subnet-1
+
+  CIDRPrivateSubnet2:
+    Type: String
+    Default: 10.192.40.0/24
+    Description: Please Enter the IP Range for Private Subnet-2
+
+  CIDRPrivateSubnet3:
+    Type: String
+    Default: 10.192.50.0/24
+    Description: Please Enter the IP Range for Private Subnet-3
+
   EC2InstanceType:
     Type: String
     Default: t2.micro
@@ -33,8 +49,57 @@ Parameters:
     Description: "EC2Instance AMI"
   AMI:
     Type: String
-    Default: "ami-0faf32e93d002e9d6"
+    Default: "ami-011fbd7955affe829"
     Description: "The AMI to use"
+  DomainName:
+    Description: Domain Name for S3 Bucket Naming
+    Type: String
+    Default: "dev.jeelpatel.me"
+  DatabaseName:
+    AllowedPattern: "[a-zA-Z][a-zA-Z0-9]*"
+    ConstraintDescription: Must begin with a letter and contain only alphanumeric characters
+    Default: csye6225
+    Description: Postgres database name
+    MaxLength: 64
+    MinLength: 1
+    Type: String
+  DatabaseUser:
+    AllowedPattern: "[a-zA-Z][a-zA-Z0-9]*"
+    ConstraintDescription: Must begin with a letter and contain only alphanumeric characters
+    Default: csye6225
+    Description: Username for Postgres database access
+    MaxLength: 16
+    MinLength: 1
+    NoEcho: true
+    Type: String
+  DatabasePassword:
+    AllowedPattern: "[a-zA-Z0-9]*"
+    ConstraintDescription: Must contain only alphanumeric characters
+    Default: password
+    Description: Password for Postgres database access
+    MaxLength: 41
+    MinLength: 8
+    NoEcho: true
+    Type: String
+  DatabaseInstanceIdentifier:
+    AllowedPattern: "[a-zA-Z][a-zA-Z0-9]*"
+    ConstraintDescription: Must begin with a letter and contain only alphanumeric characters
+    Default: csye6225
+    Description: Instance identifier name
+    MaxLength: 60
+    MinLength: 1
+    Type: String
+  DatabaseInstanceClass:
+    AllowedValues:
+      - db.t3.micro
+    ConstraintDescription: Must select a valid database instance type
+    Default: db.t3.micro
+    Description: The database instance type
+    Type: String
+  S3BucketRegion:
+    Default: "us-east-1"
+    Type: String
+    Description: S3 Bucket Region
 
 Resources:
   VPC:
@@ -92,6 +157,36 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub ${Environment} Public Subnet (AZ3)
+  #Private Subnet 1
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref CIDRPrivateSubnet1
+      AvailabilityZone: !Select [3, !GetAZs ""]
+      Tags:
+        - Key: Name
+          Value: !Sub ${Environment} Private Subnet (AZ3)
+  # Private Subnet 2
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref CIDRPrivateSubnet2
+      AvailabilityZone: !Select [4, !GetAZs ""]
+      Tags:
+        - Key: Name
+          Value: !Sub ${Environment} Private Subnet (AZ4)
+  # Private Subnet 3
+  PrivateSubnet3:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref CIDRPrivateSubnet3
+      AvailabilityZone: !Select [5, !GetAZs ""]
+      Tags:
+        - Key: Name
+          Value: !Sub ${Environment} Private Subnet (AZ5)
   #creating A Public Route Table:
   Route:
     Type: AWS::EC2::RouteTable
@@ -100,6 +195,14 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub ${Environment} Public Routes
+  #creating A Private Route Table:
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub ${Environment} Private Route Table
+      VpcId: !Ref VPC
   #creating a public route to above created public route table with destination CIDR block 0.0.0.0/0 and Above created IGW
   DefaultPublicRoute:
     Type: AWS::EC2::Route
@@ -126,11 +229,30 @@ Resources:
     Properties:
       RouteTableId: !Ref Route
       SubnetId: !Ref PublicSubnet3
+    #Attaching the private subnets-1 to the private Route Table:
+  PrivateSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      SubnetId: !Ref PrivateSubnet1
+  #Attaching the private subnets-2 to the private Route Table:
+  PrivateSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      SubnetId: !Ref PrivateSubnet2
+    #Attaching the private subnets-3 to the private Route Table:
+  PrivateSubnet3RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      SubnetId: !Ref PrivateSubnet3
   # EC2 instance Launch
   EC2AppInstance:
     Type: AWS::EC2::Instance
     Properties:
       ImageId: !Ref AMI
+      IamInstanceProfile: !Ref DemoInstanceProfile
       InstanceType: !Ref EC2InstanceType
       KeyName: aws
       SubnetId: !Ref PublicSubnet1
@@ -145,108 +267,301 @@ Resources:
             VolumeSize: 50
             Encrypted: true
       Tags:
-        -
-          Key: Name
+        - Key: Name
           Value: webapp
       UserData:
-        Fn::Base64:
-            !Sub |
-            #!/bin/bash
-            echo "Starting the REST API Service"
-            sudo systemctl enable webapp.service
-            sudo systemctl start webapp.service
-            sudo systemctl restart webapp.service
-            
-            APISRVC=$?
-            if [ $APISRVC -eq 0 ]; then
-              echo "API service is running successfully!"
-            else
-              echo "Unable to start the API service"
-            fi
-  
-  SSHSecurityGroup:
-    Type: 'AWS::EC2::SecurityGroup'
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          pwd
+          cd /home/ubuntu/webapp
+          cp .env .env.bak
+          rm .env
+          pwd
+          touch .env
+          echo PORT="3000" >> .env
+          echo HOST="${DatabaseInstance.Endpoint.Address}" >> .env
+          echo DBUSER="${DatabaseUser}" >> .env
+          echo DBPASSWORD="${DatabasePassword}" >> .env
+          echo AWS_BUCKET_NAME="${S3Bucket}" >> .env
+          echo DATABASE="${DatabaseName}" >> .env
+          echo AWS_BUCKET_REGION="${S3BucketRegion}" >> .env
+       
+          echo "Starting the REST API Service"
+          
+          sudo systemctl restart webapp.service
+          sudo systemctl status webapp.service
+          
+          APISRVC=$?
+          if [ $APISRVC -eq 0 ]; then
+            echo "API service is running successfully!"
+          else
+            echo "Unable to start the API service"
+          fi
+         
+           
+  # SSH Security Group
+  # SSHSecurityGroup:
+  #   Type: "AWS::EC2::SecurityGroup"
+  #   Properties:
+  #     GroupDescription: SSH Security Group
+  #     SecurityGroupIngress:
+  #       - IpProtocol: tcp
+  #         FromPort: 22
+  #         ToPort: 22
+  #         CidrIp: 0.0.0.0/0
+  #       - IpProtocol: tcp
+  #         FromPort: 22
+  #         ToPort: 22
+  #         CidrIpv6: ::/0
+
+  #       - IpProtocol: tcp
+  #         FromPort: 443
+  #         ToPort: 443
+  #         CidrIp: 0.0.0.0/0
+  #       - IpProtocol: tcp
+  #         FromPort: 443
+  #         ToPort: 443
+  #         CidrIpv6: ::/0
+
+  #       - IpProtocol: tcp
+  #         FromPort: 80
+  #         ToPort: 80
+  #         CidrIp: 0.0.0.0/0
+  #       - IpProtocol: tcp
+  #         FromPort: 80
+  #         ToPort: 80
+  #         CidrIpv6: ::/0
+
+  #       - IpProtocol: tcp
+  #         FromPort: 3000
+  #         ToPort: 3000
+  #         CidrIp: 0.0.0.0/0
+  #       - IpProtocol: tcp
+  #         FromPort: 3000
+  #         ToPort: 3000
+  #         CidrIpv6: ::/0
+  #     Tags:
+  #       - Key: Name
+  #         Value: SSH Security Group
+  #     VpcId: !Ref VPC
+  # Database Subnet Group
+  DatabaseSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
     Properties:
-      GroupDescription: SSH Security Group
-      SecurityGroupIngress:
-
-        - IpProtocol: tcp
-          FromPort: 22
-          ToPort: 22
-          CidrIp: 0.0.0.0/0
-        - IpProtocol: tcp
-          FromPort: 22
-          ToPort: 22
-          CidrIpv6: ::/0    
-
-        - IpProtocol: tcp
-          FromPort: 443
-          ToPort: 443
-          CidrIp: 0.0.0.0/0
-        - IpProtocol: tcp
-          FromPort: 443
-          ToPort: 443
-          CidrIpv6: ::/0  
-
-        - IpProtocol: tcp
-          FromPort: 80
-          ToPort: 80
-          CidrIp: 0.0.0.0/0
-        - IpProtocol: tcp
-          FromPort: 80
-          ToPort: 80
-          CidrIpv6: ::/0
-
-        - IpProtocol: tcp
-          FromPort: 8080
-          ToPort: 8080
-          CidrIp: 0.0.0.0/0
-        - IpProtocol: tcp
-          FromPort: 8080
-          ToPort: 8080
-          CidrIpv6: ::/0                   
+      DBSubnetGroupDescription: Subnet group for RDS database
+      SubnetIds:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+        - !Ref PrivateSubnet3
       Tags:
         - Key: Name
-          Value: SSH Security Group
-      VpcId: !Ref VPC
-  
+          Value: database subnets
   # EC2 Security Group
   EC2InstanceSecurityGroup:
-     Type: AWS::EC2::SecurityGroup
-     Properties:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
       GroupDescription: EC2 Security group with ports
       GroupName: applicationSecurityGroup
-      SecurityGroupIngress: [
-          {
-            "IpProtocol" : "tcp",
-            "FromPort" : "22",
-            "ToPort" : "22",
-            "CidrIp" : "0.0.0.0/0"
-          },
-          {
-            "IpProtocol" : "tcp",
-            "FromPort" : "80",
-            "ToPort" : "80",
-            "CidrIp" : "0.0.0.0/0"
-          },
-          {
-            "IpProtocol" : "tcp",
-            "FromPort" : "443",
-            "ToPort" : "443",
-            "CidrIp" : "0.0.0.0/0"
-          },
-          {
-            "IpProtocol" : "tcp",
-            "FromPort" : "3000",
-            "ToPort" : "3000",
-            "CidrIp" : "0.0.0.0/0"
-          }
-        ]
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+
+        - IpProtocol: tcp
+          FromPort: 3000
+          ToPort: 3000
+          CidrIp: 0.0.0.0/0
       Tags:
         - Key: Name
           Value: EC2 Security Group
       VpcId: !Ref VPC
+  # Database Security Group
+  DataBaseSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !Ref VPC
+      GroupDescription: RDS Security group with ports
+      GroupName: database
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          SourceSecurityGroupId: !Ref EC2InstanceSecurityGroup
+  # Create s3 bucket
+  S3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName:
+        !Join [
+          ".",
+          [
+            !Select [0, !Split [-, !Select [2, !Split [/, !Ref AWS::StackId]]]],
+            !Ref DomainName,
+          ],
+        ]
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      LifecycleConfiguration:
+        Rules:
+          - Id: Rule for lifecycle of S3 bucket
+            Prefix: logs
+            Status: Enabled
+            ExpirationInDays: 31
+            Transitions:
+              - TransitionInDays: 30
+                StorageClass: STANDARD_IA
+      # CorsConfiguration:
+      #   CorsRules:
+      #     - AllowedHeaders:
+      #         - "*"
+      #       AllowedMethods:
+      #         - GET
+      #         - PUT
+      #         - POST
+      #         - DELETE
+      #       AllowedOrigins:
+      #         - "*"
+      #       MaxAge: "3600"
+  # RDS Parameter Group
+  RDSParamGroup:
+    Type: AWS::RDS::DBParameterGroup
+    Properties:
+      Family: postgres14
+      Description: Custom Database Parameter Group
+      # Parameters:
+      #   shared_preload_libraries: "pg_stat_statements"
+      #   pg_stat_statements.max: "10000"
+      #   pg_stat_statements.track: "all"
+      #   log_min_duration_statement: "1000"
+      #   log_duration: "1"
+      #   random_page_cost: "1.1"
+      #   checkpoint_completion_target: "0.9"
+      #   min_wal_size: "129"
+      #   effective_io_concurrency: "200"
+      #   log_statement: "all"
+      #   rds.force_ssl: 1
+  # RDS Instance
+  DatabaseInstance:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      
+      DBInstanceClass: !Ref DatabaseInstanceClass
+      DBInstanceIdentifier: !Ref DatabaseInstanceIdentifier
+      DBName: !Ref DatabaseName
+      DBSubnetGroupName: !Ref DatabaseSubnetGroup
+      Engine: postgres
+      EngineVersion: 14.4
+      AllocatedStorage: 20
+      StorageEncrypted: true
+      MasterUsername: !Ref DatabaseUser
+      MasterUserPassword: !Ref DatabasePassword
+      PubliclyAccessible: false
+      DBParameterGroupName: !Ref RDSParamGroup
+      VPCSecurityGroups:
+        - !Ref DataBaseSecurityGroup
+  #creating IAM roles:
+  # EC2CSYE6225:
+  #   Type: AWS::IAM::Role
+  #   DependsOn: WebAppS3
+  #   Properties:
+  #     AssumeRolePolicyDocument:
+  #       Version: "2012-10-17"
+  #       Statement:
+  #         - Effect: Allow
+  #           Principal:
+  #             Service:
+  #               - ec2.amazonaws.com
+  #           Action:
+  #             - "sts:AssumeRole"
+  #     Path: /
+  #     RoleName: EC2-CSYE6225
+  #     ManagedPolicyArns:
+  #       - !Ref WebAppS3
+  #creating s3 policy:
+  # WebAppS3:
+  #   Type: "AWS::IAM::ManagedPolicy"
+  #   DependsOn: S3Bucket
+  #   Properties:
+  #     ManagedPolicyName: WebAppS3
+  #     PolicyDocument:
+  #       Version: 2012-10-17
+  #       Statement:
+  #         - Sid: AllowGetPutDeleteActionsOnS3Bucket
+  #           Effect: Allow
+  #           Action:
+  #             - "s3:PutObject"
+  #             - "s3:GetObject"
+  #             - "s3:DeleteObject"
+  #             - "s3:PostObject"
+  #           Resource:
+  #             - "Fn::Join":
+  #                 - ""
+  #                 - - "arn:aws:s3:::"
+  #                   - Ref: S3Bucket
+  #                   - /*
+  #             - "Fn::Join":
+  #                 - ""
+  #                 - - "arn:aws:s3:::"
+  #                   - Ref: S3Bucket
+  RootRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      RoleName: "EC2-CSYE6225"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service:
+                - "ec2.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      Path: "/"
 
+  DemoInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: demo-ec2-instance-profile
+      Path: /
+      Roles:
+        - !Ref RootRole
+  RolePolicies:
+    Type: "AWS::IAM::Policy"
+    Properties:
+      PolicyName: WebAppS3
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - "s3:Put*"
+              - "s3:Get*"
+              - "s3:Delete*"
+            Resource:
+              - "Fn::Join":
+                  - ""
+                  - - "arn:aws:s3:::"
+                    - Ref: S3Bucket
+                    - /*
+              - "Fn::Join":
+                  - ""
+                  - - "arn:aws:s3:::"
+                    - Ref: S3Bucket
+      Roles:
+        - Ref: RootRole
 #For exposing the resources from one Stack on CloudFormation to Others
 Outputs:
   VpcId:
