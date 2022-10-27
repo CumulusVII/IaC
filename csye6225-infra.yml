@@ -288,8 +288,8 @@ Resources:
        
           echo "Starting the REST API Service"
           
-          sudo systemctl restart webapp.service
-          sudo systemctl status webapp.service
+          sudo systemctl restart webservice.service
+          sudo systemctl status webservice.service
           
           APISRVC=$?
           if [ $APISRVC -eq 0 ]; then
