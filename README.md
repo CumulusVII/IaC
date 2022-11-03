@@ -142,6 +142,13 @@ aws cloudformation delete-stack --stack-name <stack-name>
 aws cloudformation list-stacks --output table
 ```
 
+### :bucket: Create IAM User using Cloudformation 
+
+- To create the stack, run the following command:
+
+```shell
+aws cloudformation create-stack --stack-name app-stack --template-body file://csye6225-infra.yml --capabilities CAPABILITY_NAMED_IAM
+```
 ## :ninja: Author
 
 [Jeel Patel](mailto:patel.jeel@northeastern.edu)

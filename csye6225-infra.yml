@@ -49,7 +49,7 @@ Parameters:
     Description: "EC2Instance AMI"
   AMI:
     Type: String
-    Default: "ami-011fbd7955affe829"
+    Default: "ami-0eb0cd04f4785c0e9"
     Description: "The AMI to use"
   DomainName:
     Description: Domain Name for S3 Bucket Naming
@@ -100,6 +100,10 @@ Parameters:
     Default: "us-east-1"
     Type: String
     Description: S3 Bucket Region
+  HostedZoneName:
+   Type: String
+   Default: 'jeeltpatel.me.'
+   Description: Hosted Zone Name
 
 Resources:
   VPC:
@@ -247,6 +251,15 @@ Resources:
     Properties:
       RouteTableId: !Ref PrivateRouteTable
       SubnetId: !Ref PrivateSubnet3
+  DNSRecord:
+   Type: AWS::Route53::RecordSet
+   Properties:
+    HostedZoneName: !Join ['',['prod',.,!Ref HostedZoneName]]
+    Name: !Join ['',['prod',.,!Ref HostedZoneName]]
+    Type: A
+    TTL: '60'
+    ResourceRecords:
+      - !GetAtt EC2AppInstance.PublicIp
   # EC2 instance Launch
   EC2AppInstance:
     Type: AWS::EC2::Instance
@@ -285,65 +298,19 @@ Resources:
           echo AWS_BUCKET_NAME="${S3Bucket}" >> .env
           echo DATABASE="${DatabaseName}" >> .env
           echo AWS_BUCKET_REGION="${S3BucketRegion}" >> .env
-       
+
           echo "Starting the REST API Service"
-          
+
           sudo systemctl restart webservice.service
           sudo systemctl status webservice.service
-          
+
           APISRVC=$?
           if [ $APISRVC -eq 0 ]; then
             echo "API service is running successfully!"
           else
             echo "Unable to start the API service"
           fi
-         
-           
-  # SSH Security Group
-  # SSHSecurityGroup:
-  #   Type: "AWS::EC2::SecurityGroup"
-  #   Properties:
-  #     GroupDescription: SSH Security Group
-  #     SecurityGroupIngress:
-  #       - IpProtocol: tcp
-  #         FromPort: 22
-  #         ToPort: 22
-  #         CidrIp: 0.0.0.0/0
-  #       - IpProtocol: tcp
-  #         FromPort: 22
-  #         ToPort: 22
-  #         CidrIpv6: ::/0
-
-  #       - IpProtocol: tcp
-  #         FromPort: 443
-  #         ToPort: 443
-  #         CidrIp: 0.0.0.0/0
-  #       - IpProtocol: tcp
-  #         FromPort: 443
-  #         ToPort: 443
-  #         CidrIpv6: ::/0
-
-  #       - IpProtocol: tcp
-  #         FromPort: 80
-  #         ToPort: 80
-  #         CidrIp: 0.0.0.0/0
-  #       - IpProtocol: tcp
-  #         FromPort: 80
-  #         ToPort: 80
-  #         CidrIpv6: ::/0
-
-  #       - IpProtocol: tcp
-  #         FromPort: 3000
-  #         ToPort: 3000
-  #         CidrIp: 0.0.0.0/0
-  #       - IpProtocol: tcp
-  #         FromPort: 3000
-  #         ToPort: 3000
-  #         CidrIpv6: ::/0
-  #     Tags:
-  #       - Key: Name
-  #         Value: SSH Security Group
-  #     VpcId: !Ref VPC
+  
   # Database Subnet Group
   DatabaseSubnetGroup:
     Type: AWS::RDS::DBSubnetGroup
@@ -423,41 +390,16 @@ Resources:
             Transitions:
               - TransitionInDays: 30
                 StorageClass: STANDARD_IA
-      # CorsConfiguration:
-      #   CorsRules:
-      #     - AllowedHeaders:
-      #         - "*"
-      #       AllowedMethods:
-      #         - GET
-      #         - PUT
-      #         - POST
-      #         - DELETE
-      #       AllowedOrigins:
-      #         - "*"
-      #       MaxAge: "3600"
   # RDS Parameter Group
   RDSParamGroup:
     Type: AWS::RDS::DBParameterGroup
     Properties:
       Family: postgres14
       Description: Custom Database Parameter Group
-      # Parameters:
-      #   shared_preload_libraries: "pg_stat_statements"
-      #   pg_stat_statements.max: "10000"
-      #   pg_stat_statements.track: "all"
-      #   log_min_duration_statement: "1000"
-      #   log_duration: "1"
-      #   random_page_cost: "1.1"
-      #   checkpoint_completion_target: "0.9"
-      #   min_wal_size: "129"
-      #   effective_io_concurrency: "200"
-      #   log_statement: "all"
-      #   rds.force_ssl: 1
   # RDS Instance
   DatabaseInstance:
     Type: AWS::RDS::DBInstance
     Properties:
-      
       DBInstanceClass: !Ref DatabaseInstanceClass
       DBInstanceIdentifier: !Ref DatabaseInstanceIdentifier
       DBName: !Ref DatabaseName
@@ -472,50 +414,7 @@ Resources:
       DBParameterGroupName: !Ref RDSParamGroup
       VPCSecurityGroups:
         - !Ref DataBaseSecurityGroup
-  #creating IAM roles:
-  # EC2CSYE6225:
-  #   Type: AWS::IAM::Role
-  #   DependsOn: WebAppS3
-  #   Properties:
-  #     AssumeRolePolicyDocument:
-  #       Version: "2012-10-17"
-  #       Statement:
-  #         - Effect: Allow
-  #           Principal:
-  #             Service:
-  #               - ec2.amazonaws.com
-  #           Action:
-  #             - "sts:AssumeRole"
-  #     Path: /
-  #     RoleName: EC2-CSYE6225
-  #     ManagedPolicyArns:
-  #       - !Ref WebAppS3
-  #creating s3 policy:
-  # WebAppS3:
-  #   Type: "AWS::IAM::ManagedPolicy"
-  #   DependsOn: S3Bucket
-  #   Properties:
-  #     ManagedPolicyName: WebAppS3
-  #     PolicyDocument:
-  #       Version: 2012-10-17
-  #       Statement:
-  #         - Sid: AllowGetPutDeleteActionsOnS3Bucket
-  #           Effect: Allow
-  #           Action:
-  #             - "s3:PutObject"
-  #             - "s3:GetObject"
-  #             - "s3:DeleteObject"
-  #             - "s3:PostObject"
-  #           Resource:
-  #             - "Fn::Join":
-  #                 - ""
-  #                 - - "arn:aws:s3:::"
-  #                   - Ref: S3Bucket
-  #                   - /*
-  #             - "Fn::Join":
-  #                 - ""
-  #                 - - "arn:aws:s3:::"
-  #                   - Ref: S3Bucket
+
   RootRole:
     Type: "AWS::IAM::Role"
     Properties:
