@@ -49,12 +49,12 @@ Parameters:
     Description: "EC2Instance AMI"
   AMI:
     Type: String
-    Default: "ami-0eb0cd04f4785c0e9"
+    Default: "ami-0354dbbf79e3b0146"
     Description: "The AMI to use"
   DomainName:
     Description: Domain Name for S3 Bucket Naming
     Type: String
-    Default: "dev.jeelpatel.me"
+    Default: "prod.jeeltpatel.me"
   DatabaseName:
     AllowedPattern: "[a-zA-Z][a-zA-Z0-9]*"
     ConstraintDescription: Must begin with a letter and contain only alphanumeric characters
