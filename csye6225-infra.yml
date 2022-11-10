@@ -49,12 +49,12 @@ Parameters:
     Description: "EC2Instance AMI"
   AMI:
     Type: String
-    Default: "ami-0354dbbf79e3b0146"
+    Default: "ami-0f317db6312a9659e"
     Description: "The AMI to use"
   DomainName:
     Description: Domain Name for S3 Bucket Naming
     Type: String
-    Default: "prod.jeeltpatel.me"
+    Default: "dev.jeeltpatel.me"
   DatabaseName:
     AllowedPattern: "[a-zA-Z][a-zA-Z0-9]*"
     ConstraintDescription: Must begin with a letter and contain only alphanumeric characters
@@ -101,9 +101,9 @@ Parameters:
     Type: String
     Description: S3 Bucket Region
   HostedZoneName:
-   Type: String
-   Default: 'jeeltpatel.me.'
-   Description: Hosted Zone Name
+    Type: String
+    Default: "jeeltpatel.me."
+    Description: Hosted Zone Name
 
 Resources:
   VPC:
@@ -252,14 +252,14 @@ Resources:
       RouteTableId: !Ref PrivateRouteTable
       SubnetId: !Ref PrivateSubnet3
   DNSRecord:
-   Type: AWS::Route53::RecordSet
-   Properties:
-    HostedZoneName: !Join ['',['prod',.,!Ref HostedZoneName]]
-    Name: !Join ['',['prod',.,!Ref HostedZoneName]]
-    Type: A
-    TTL: '60'
-    ResourceRecords:
-      - !GetAtt EC2AppInstance.PublicIp
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneName: !Join ["", ["dev", ., !Ref HostedZoneName]]
+      Name: !Join ["", ["dev", ., !Ref HostedZoneName]]
+      Type: A
+      TTL: "60"
+      ResourceRecords:
+        - !GetAtt EC2AppInstance.PublicIp
   # EC2 instance Launch
   EC2AppInstance:
     Type: AWS::EC2::Instance
@@ -310,7 +310,7 @@ Resources:
           else
             echo "Unable to start the API service"
           fi
-  
+
   # Database Subnet Group
   DatabaseSubnetGroup:
     Type: AWS::RDS::DBSubnetGroup
@@ -415,6 +415,7 @@ Resources:
       VPCSecurityGroups:
         - !Ref DataBaseSecurityGroup
 
+  # IAM Role
   RootRole:
     Type: "AWS::IAM::Role"
     Properties:
@@ -429,7 +430,7 @@ Resources:
             Action:
               - "sts:AssumeRole"
       Path: "/"
-
+  #Instance Profile
   DemoInstanceProfile:
     Type: AWS::IAM::InstanceProfile
     Properties:
@@ -437,6 +438,7 @@ Resources:
       Path: /
       Roles:
         - !Ref RootRole
+  # IAM Policy
   RolePolicies:
     Type: "AWS::IAM::Policy"
     Properties:
@@ -459,6 +461,31 @@ Resources:
                   - ""
                   - - "arn:aws:s3:::"
                     - Ref: S3Bucket
+      Roles:
+        - Ref: RootRole
+  # EC2 CloudWatch
+  CloudWatchPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: "EC2CloudWatchPolicy"
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - "cloudwatch:PutMetricData"
+              - "ec2:DescribeTags"
+              - "logs:PutLogEvents"
+              - "logs:DescribeLogStreams"
+              - "logs:DescribeLogGroups"
+              - "logs:CreateLogStream"
+              - "logs:CreateLogGroup"
+            Resource: "*"
+          - Effect: Allow
+            Action:
+              - "ssm:GetParameter"
+              - "ssm:PutParameter"
+            Resource: "arn:aws:ssm:*:*:parameter/AmazonCloudWatch-*"
       Roles:
         - Ref: RootRole
 #For exposing the resources from one Stack on CloudFormation to Others
