@@ -49,12 +49,12 @@ Parameters:
     Description: "EC2Instance AMI"
   AMI:
     Type: String
-    Default: "ami-0f317db6312a9659e"
+    Default: "ami-0262c74ba1e256237"
     Description: "The AMI to use"
   DomainName:
     Description: Domain Name for S3 Bucket Naming
     Type: String
-    Default: "dev.jeeltpatel.me"
+    Default: "prod.jeeltpatel.me"
   DatabaseName:
     AllowedPattern: "[a-zA-Z][a-zA-Z0-9]*"
     ConstraintDescription: Must begin with a letter and contain only alphanumeric characters
@@ -254,8 +254,8 @@ Resources:
   DNSRecord:
     Type: AWS::Route53::RecordSet
     Properties:
-      HostedZoneName: !Join ["", ["dev", ., !Ref HostedZoneName]]
-      Name: !Join ["", ["dev", ., !Ref HostedZoneName]]
+      HostedZoneName: !Join ["", ["prod", ., !Ref HostedZoneName]]
+      Name: !Join ["", ["prod", ., !Ref HostedZoneName]]
       Type: A
       TTL: "60"
       ResourceRecords:
@@ -430,6 +430,10 @@ Resources:
             Action:
               - "sts:AssumeRole"
       Path: "/"
+      ManagedPolicyArns:
+      - "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
+      - "arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess"
+      - "arn:aws:iam::aws:policy/AmazonSNSFullAccess"
   #Instance Profile
   DemoInstanceProfile:
     Type: AWS::IAM::InstanceProfile
@@ -438,6 +442,7 @@ Resources:
       Path: /
       Roles:
         - !Ref RootRole
+
   # IAM Policy
   RolePolicies:
     Type: "AWS::IAM::Policy"
@@ -488,6 +493,111 @@ Resources:
             Resource: "arn:aws:ssm:*:*:parameter/AmazonCloudWatch-*"
       Roles:
         - Ref: RootRole
+
+  DynamodbTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+        - AttributeName: "Email"
+          AttributeType: "S"
+        - AttributeName: "TokenName"
+          AttributeType: "S"
+      KeySchema:
+        - AttributeName: "Email"
+          KeyType: "HASH"
+        - AttributeName: "TokenName"
+          KeyType: "RANGE"
+      ProvisionedThroughput:
+        ReadCapacityUnits: 1
+        WriteCapacityUnits: 1
+      TableName: csye-6225
+      TimeToLiveSpecification:
+        AttributeName: TimeToLive
+        Enabled: true
+      Tags:
+        - Key: key
+          Value: value
+
+# creating sns topic:
+  topicId:
+    Type: "AWS::SNS::Topic"
+    DependsOn: LambdaFunction
+    Properties:
+      Subscription:
+        - Endpoint: 
+           Fn::GetAtt: 
+             - "LambdaFunction"
+             - "Arn"
+          Protocol: lambda
+      TopicName: email
+  # creating SNS topic policy:
+  topicPolicy:
+    Type: "AWS::IAM::ManagedPolicy"
+    DependsOn: topicId
+    Properties:
+      ManagedPolicyName: EC2TopicAccessPolicy
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: AllowEC2ToPublishToSNSTopic
+            Effect: Allow
+            Action:
+              - "sns:Publish"
+              - "sns:CreateTopic"
+            Resource: !Ref topicId
+
+ #creating permission for lambda:
+  LambdaPermission:
+    Type: "AWS::Lambda::Permission"
+    DependsOn: LambdaFunction
+    Properties:
+      FunctionName: !Ref LambdaFunction
+      Action: "lambda:InvokeFunction"
+      Principal: sns.amazonaws.com
+      SourceArn: !Ref topicId
+
+  LambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: emailVerify
+      Role:
+        Fn::Join:
+        - ''
+        - - 'arn:aws:iam::'
+          - !Ref AWS::AccountId
+          - ":role/"
+          - !Ref LambdaRole
+      Runtime: nodejs16.x
+      Handler: index.handler
+      Code:
+        ZipFile: |
+          console.log('In Lambda function');
+          exports.handler=function(event,context,callback){
+            console.log('Message from SNS');
+            var message = event.Records[0].Sns.Message;
+            callback(null,"Success");
+          };
+      Description: Function to store token in dynamodb and send email to SNS
+  
+  LambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: "LambdaFunctionRole"
+      AssumeRolePolicyDocument: 
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSESFullAccess
+        - arn:aws:iam::aws:policy/CloudWatchLogsFullAccess
+        - arn:aws:iam::aws:policy/AmazonS3FullAccess 
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - "arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess"
 #For exposing the resources from one Stack on CloudFormation to Others
 Outputs:
   VpcId:
